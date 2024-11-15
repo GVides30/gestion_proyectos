@@ -18,5 +18,9 @@ tags_metadata = [
  {
      "name":"roles",
      "description":"roles endpoint"
+ },
+ {
+     "name":"bitacoras",
+     "description":"bitacoras endpoint"
  }
 ]

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException,status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from config.db import get_db  # Asegúrate de que get_db esté configurado para obtener la sesión de la base de datos
 from models import models  # Importa tus modelos (Usuario, etc.)
@@ -8,7 +8,7 @@ from typing import List
 from starlette.status import HTTP_204_NO_CONTENT
 from cryptography.fernet import Fernet
 from models.models import Proyecto,Gasolinera # Importa tu modelo de Proyecto
-from schemas.schema import Proyecto as ProyectoSchema,GasolineraSchema,RolSchema # Importa el esquema Pydantic correspondiente
+from schemas.schema import Proyecto as ProyectoSchema,GasolineraSchema,RolSchema, BitacoraSchema, BitacoraCreateSchema, BitacoraUpdateSchema # Importa el esquema Pydantic correspondiente
 
 # Inicializa el encriptador de contraseña
 key = Fernet.generate_key()
@@ -34,6 +34,7 @@ def get_user(id: int, db: Session = Depends(get_db)):
     # Retorna un objeto User construido con los datos obtenidos
     return User(
         id=db_user.id_usr,
+        created_at=db_user.created_at,
         name=db_user.nombre,
         apellido=db_user.apellido,
         password=db_user.password,
@@ -59,6 +60,7 @@ def create_user(user: User, db: Session = Depends(get_db)):
     
     # Crear el nuevo usuario
     new_user = models.Usuario(
+        created_at=user.created_at,
         nombre=user.name,
         apellido=user.apellido,
         password=f.encrypt(user.password.encode("utf-8")),
@@ -75,6 +77,7 @@ def create_user(user: User, db: Session = Depends(get_db)):
 
     return User(
         id=new_user.id_usr,
+        created_at=new_user.created_at,
         name=new_user.nombre,
         apellido=new_user.apellido,
         password=new_user.password,
@@ -93,6 +96,7 @@ def update_user(id: int, user: User, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="User not found")
 
     # Actualiza los campos
+    db_user.created_at=user.created_at
     db_user.nombre = user.name
     db_user.apellido = user.apellido
     if user.password:
@@ -105,6 +109,7 @@ def update_user(id: int, user: User, db: Session = Depends(get_db)):
     db.refresh(db_user)  # Refresca el objeto actualizado
     return User(
         id=db_user.id_usr,         # Mapea id_usr a id en el modelo Pydantic
+        created_at=db_user.created_at,
         name=db_user.nombre,
         apellido=db_user.apellido,
         password=db_user.password,
@@ -389,3 +394,110 @@ def delete_role(id_rol: int, db: Session = Depends(get_db)):
     db.delete(db_role)
     db.commit()
     return {"message": "Role successfully deleted"}
+
+# Crear el enrutador para bitácoras
+bitacora_router = APIRouter(
+    prefix="/bitacoras",
+    tags=["bitacoras"]
+)
+
+# Crear una nueva bitácora
+@bitacora_router.post("/", response_model=BitacoraSchema, status_code=status.HTTP_201_CREATED)
+def create_bitacora(bitacora: BitacoraCreateSchema, db: Session = Depends(get_db)):
+    # Crear la instancia de Bitacora en base de datos
+    new_bitacora = models.Bitacora(
+        created_at=bitacora.created_at,
+        comentario=bitacora.comentario,
+        km_inicial=bitacora.km_inicial,
+        km_final=bitacora.km_final,
+        num_galones=bitacora.num_galones,
+        costo=bitacora.costo,
+        tipo_gasolina=bitacora.tipo_gasolina,
+        id_usr=bitacora.id_usr,
+        id_vehiculo=bitacora.id_vehiculo,
+        id_gasolinera=bitacora.id_gasolinera,
+        id_proyecto=bitacora.id_proyecto
+    )
+    db.add(new_bitacora)
+    db.commit()
+    db.refresh(new_bitacora)
+    print(new_bitacora.usuario.__dict__)  # Confirmar qué campos tiene usuario
+
+    # Construir los objetos anidados usando from_orm
+    usuario_data = User.from_orm(new_bitacora.usuario) if new_bitacora.usuario else None
+    vehiculo_data = Vehiculo.from_orm(new_bitacora.vehiculo) if new_bitacora.vehiculo else None
+    gasolinera_data = GasolineraSchema.from_orm(new_bitacora.gasolinera) if new_bitacora.gasolinera else None
+    proyecto_data = ProyectoSchema.from_orm(new_bitacora.proyecto) if new_bitacora.proyecto else None
+
+
+    # Retornar el objeto de respuesta completo
+    return BitacoraSchema(
+        id_bitacora=new_bitacora.id_bitacora,
+        created_at=new_bitacora.created_at,
+        comentario=new_bitacora.comentario,
+        km_inicial=new_bitacora.km_inicial,
+        km_final=new_bitacora.km_final,
+        num_galones=new_bitacora.num_galones,
+        costo=new_bitacora.costo,
+        tipo_gasolina=new_bitacora.tipo_gasolina,
+        id_usr=new_bitacora.id_usr,
+        id_vehiculo=new_bitacora.id_vehiculo,
+        id_gasolinera=new_bitacora.id_gasolinera,
+        id_proyecto=new_bitacora.id_proyecto,
+        usuario=usuario_data,
+        vehiculo=vehiculo_data,
+        gasolinera=gasolinera_data,
+        proyecto=proyecto_data
+    )
+
+# Actualizar una bitácora por ID
+@bitacora_router.put("/{id}", response_model=BitacoraSchema)
+def update_bitacora(id: int, bitacora: BitacoraUpdateSchema, db: Session = Depends(get_db)):
+    # Busca la bitácora en la base de datos
+    db_bitacora = db.query(models.Bitacora).filter(models.Bitacora.id_bitacora == id).first()
+    if db_bitacora is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bitacora not found")
+
+    # Actualiza solo los campos proporcionados
+    if bitacora.created_at is not None:
+        db_bitacora.created_at = bitacora.created_at
+    if bitacora.comentario is not None:
+        db_bitacora.comentario = bitacora.comentario
+    if bitacora.km_inicial is not None:
+        db_bitacora.km_inicial = bitacora.km_inicial
+    if bitacora.km_final is not None:
+        db_bitacora.km_final = bitacora.km_final
+    if bitacora.num_galones is not None:
+        db_bitacora.num_galones = bitacora.num_galones
+    if bitacora.costo is not None:
+        db_bitacora.costo = bitacora.costo
+    if bitacora.tipo_gasolina is not None:
+        db_bitacora.tipo_gasolina = bitacora.tipo_gasolina
+    if bitacora.id_usr is not None:
+        db_bitacora.id_usr = bitacora.id_usr
+    if bitacora.id_vehiculo is not None:
+        db_bitacora.id_vehiculo = bitacora.id_vehiculo
+    if bitacora.id_gasolinera is not None:
+        db_bitacora.id_gasolinera = bitacora.id_gasolinera
+    if bitacora.id_proyecto is not None:
+        db_bitacora.id_proyecto = bitacora.id_proyecto
+
+    # Guarda los cambios en la base de datos
+    db.commit()
+    db.refresh(db_bitacora)
+
+    # Retorna el objeto actualizado
+    return db_bitacora
+
+
+
+# Eliminar una bitácora por ID
+@bitacora_router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_bitacora(id: int, db: Session = Depends(get_db)):
+    db_bitacora = db.query(models.Bitacora).filter(models.Bitacora.id_bitacora == id).first()
+    if db_bitacora is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bitacora not found")
+    
+    db.delete(db_bitacora)
+    db.commit()
+    return {"message": "Bitacora successfully deleted"}
