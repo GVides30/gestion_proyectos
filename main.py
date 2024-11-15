@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from routes.routes import user, vehiculo, proyecto, gasolinera
+from routes.routes import user, vehiculo, proyecto, gasolinera, roles
 from config.openapi import tags_metadata
 
 app = FastAPI(
@@ -14,4 +14,5 @@ app.include_router(user)
 app.include_router(vehiculo)
 app.include_router(proyecto)
 app.include_router(gasolinera)
+app.include_router(roles)
 

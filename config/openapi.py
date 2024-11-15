@@ -14,5 +14,9 @@ tags_metadata = [
  {
      "name":"gasolineras",
      "description":"gasolineras endpoint"
+ },
+ {
+     "name":"roles",
+     "description":"roles endpoint"
  }
 ]

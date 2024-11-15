@@ -8,7 +8,7 @@ from typing import List
 from starlette.status import HTTP_204_NO_CONTENT
 from cryptography.fernet import Fernet
 from models.models import Proyecto,Gasolinera # Importa tu modelo de Proyecto
-from schemas.schema import Proyecto as ProyectoSchema,GasolineraSchema # Importa el esquema Pydantic correspondiente
+from schemas.schema import Proyecto as ProyectoSchema,GasolineraSchema,RolSchema # Importa el esquema Pydantic correspondiente
 
 # Inicializa el encriptador de contraseña
 key = Fernet.generate_key()
@@ -38,31 +38,52 @@ def get_user(id: int, db: Session = Depends(get_db)):
         apellido=db_user.apellido,
         password=db_user.password,
         username=db_user.username,
-        active=db_user.activo
+        active=db_user.activo,
+        rol=db_user.rol
     )
 
 
-# Crear un nuevo usuario
+from fastapi import HTTPException
+
 @user.post("/", tags=["users"], response_model=User, description="Create a new user")
 def create_user(user: User, db: Session = Depends(get_db)):
+
+    # Verifica si el rol existe
+    if user.rol and not db.query(models.Rol).filter(models.Rol.id_rol == user.rol.id_rol).first():
+        raise HTTPException(status_code=400, detail="El rol especificado no existe | Por favor revise los roles disponibles")
+
+    # Verificar si el nombre de usuario ya existe
+    existing_user = db.query(models.Usuario).filter(models.Usuario.username == user.username).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Username already exists")
+    
+    # Crear el nuevo usuario
     new_user = models.Usuario(
         nombre=user.name,
-        apellido=user.apellido,  # Incluye el apellido en el nuevo usuario
+        apellido=user.apellido,
         password=f.encrypt(user.password.encode("utf-8")),
         activo=user.active if user.active is not None else True,
-        username=user.username
+        username=user.username,
+        id_rol=user.rol.id_rol if user.rol else None
     )
     db.add(new_user)
     db.commit()
-    db.refresh(new_user)  # Refresca el objeto para obtener el ID generado
+    db.refresh(new_user)
+
+    # Convertir el rol a RolSchema si existe
+    rol_schema = RolSchema.from_orm(new_user.rol) if new_user.rol else None
+
     return User(
-        id=new_user.id_usr,  # Mapea id_usr a id en el modelo Pydantic
+        id=new_user.id_usr,
         name=new_user.nombre,
         apellido=new_user.apellido,
         password=new_user.password,
         username=new_user.username,
-        active=new_user.activo
+        active=new_user.activo,
+        rol=rol_schema
     )
+
+
 
 # Actualizar un usuario por ID
 @user.put("/users/{id}", tags=["users"], response_model=User, description="Update a User by Id")
@@ -78,6 +99,7 @@ def update_user(id: int, user: User, db: Session = Depends(get_db)):
         db_user.password = f.encrypt(user.password.encode("utf-8"))
     db_user.username = user.username
     db_user.activo = user.active if user.active is not None else db_user.activo
+    db_user.id_rol = user.rol.id_rol if user.rol else db_user.id_rol
 
     db.commit()
     db.refresh(db_user)  # Refresca el objeto actualizado
@@ -87,7 +109,8 @@ def update_user(id: int, user: User, db: Session = Depends(get_db)):
         apellido=db_user.apellido,
         password=db_user.password,
         username=db_user.username,
-        active=db_user.activo
+        active=db_user.activo,
+        rol=db_user.rol
     )
 
 
@@ -314,3 +337,55 @@ def delete_gasolinera(id: int, db: Session = Depends(get_db)):
     db.delete(db_gasolinera)
     db.commit()
     return {"message": "Gasolinera successfully deleted"}
+
+# Configura el enrutador de FastAPI para roles
+roles = APIRouter()
+
+# Crear un nuevo rol
+@roles.post("/roles", tags=["roles"], response_model=RolSchema, description="Create a new role")
+def create_role(role: RolSchema, db: Session = Depends(get_db)):
+    new_role = models.Rol(
+        descripcion=role.descripcion
+    )
+    db.add(new_role)
+    db.commit()
+    db.refresh(new_role)
+    return new_role
+
+# Obtener un rol por ID
+@roles.get("/roles/{id_rol}", tags=["roles"], response_model=RolSchema, description="Get a role by Id")
+def get_role(id_rol: int, db: Session = Depends(get_db)):
+    db_role = db.query(models.Rol).filter(models.Rol.id_rol == id_rol).first()
+    if db_role is None:
+        raise HTTPException(status_code=404, detail="Role not found")
+    return db_role
+
+# Obtener todos los roles
+@roles.get("/roles", tags=["roles"], response_model=List[RolSchema], description="Get all roles")
+def get_all_roles(db: Session = Depends(get_db)):
+    roles = db.query(models.Rol).all()
+    return roles
+
+# Actualizar un rol por ID
+@roles.put("/roles/{id_rol}", tags=["roles"], response_model=RolSchema, description="Update a role by Id")
+def update_role(id_rol: int, role: RolSchema, db: Session = Depends(get_db)):
+    db_role = db.query(models.Rol).filter(models.Rol.id_rol == id_rol).first()
+    if db_role is None:
+        raise HTTPException(status_code=404, detail="Role not found")
+
+    # Actualiza el campo de descripción
+    db_role.descripcion = role.descripcion
+    db.commit()
+    db.refresh(db_role)
+    return db_role
+
+# Eliminar un rol por ID
+@roles.delete("/roles/{id_rol}", tags=["roles"], status_code=status.HTTP_204_NO_CONTENT, description="Delete a role by Id")
+def delete_role(id_rol: int, db: Session = Depends(get_db)):
+    db_role = db.query(models.Rol).filter(models.Rol.id_rol == id_rol).first()
+    if db_role is None:
+        raise HTTPException(status_code=404, detail="Role not found")
+
+    db.delete(db_role)
+    db.commit()
+    return {"message": "Role successfully deleted"}

@@ -3,6 +3,15 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 
+# Esquema para Rol
+class RolSchema(BaseModel):
+    id_rol: Optional[int]
+    descripcion: str
+
+    class Config:
+        orm_mode = True
+        from_attributes = True
+
 class User(BaseModel):
     id: Optional[int]  # Para que FastAPI incluya el ID en las respuestas, lo hacemos opcional
     name: str
@@ -10,6 +19,7 @@ class User(BaseModel):
     password: str
     username: str
     active: Optional[bool] = True  # Refleja el campo `activo` en tu modelo de base de datos
+    rol: Optional[RolSchema]
 
     class Config:
         orm_mode = True  # Habilita el soporte para objetos ORM
