@@ -44,8 +44,6 @@ def get_user(id: int, db: Session = Depends(get_db)):
     )
 
 
-from fastapi import HTTPException
-
 @user.post("/", tags=["users"], response_model=User, description="Create a new user")
 def create_user(user: User, db: Session = Depends(get_db)):
 
@@ -72,19 +70,8 @@ def create_user(user: User, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
 
-    # Convertir el rol a RolSchema si existe
-    rol_schema = RolSchema.from_orm(new_user.rol) if new_user.rol else None
-
-    return User(
-        id=new_user.id_usr,
-        created_at=new_user.created_at,
-        name=new_user.nombre,
-        apellido=new_user.apellido,
-        password=new_user.password,
-        username=new_user.username,
-        active=new_user.activo,
-        rol=rol_schema
-    )
+    # Usar `from_orm` para mapear el modelo de base de datos a un esquema Pydantic
+    return User.from_orm(new_user)
 
 
 
