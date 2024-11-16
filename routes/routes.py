@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException,status
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from config.db import get_db  # Asegúrate de que get_db esté configurado para obtener la sesión de la base de datos
 from models import models  # Importa tus modelos (Usuario, etc.)
 from schemas.schema import User, UserCount, Vehiculo
@@ -362,54 +363,43 @@ bitacora_router = APIRouter(
     tags=["bitacoras"]
 )
 
+# Obtener todas las bitácoras
+@bitacora_router.get("/", response_model=List[BitacoraSchema], status_code=status.HTTP_200_OK)
+def get_all_bitacoras(db: Session = Depends(get_db)):
+    # Consulta todas las bitácoras en la base de datos
+    bitacoras = db.query(models.Bitacora).all()
+    
+    # Retorna la lista de bitácoras
+    return [BitacoraSchema.from_orm(bitacora) for bitacora in bitacoras]
+
+
 # Crear una nueva bitácora
 @bitacora_router.post("/", response_model=BitacoraSchema, status_code=status.HTTP_201_CREATED)
 def create_bitacora(bitacora: BitacoraCreateSchema, db: Session = Depends(get_db)):
-    # Crear la instancia de Bitacora en base de datos
-    new_bitacora = models.Bitacora(
-        created_at=bitacora.created_at,
-        comentario=bitacora.comentario,
-        km_inicial=bitacora.km_inicial,
-        km_final=bitacora.km_final,
-        num_galones=bitacora.num_galones,
-        costo=bitacora.costo,
-        tipo_gasolina=bitacora.tipo_gasolina,
-        id_usr=bitacora.id_usr,
-        id_vehiculo=bitacora.id_vehiculo,
-        id_gasolinera=bitacora.id_gasolinera,
-        id_proyecto=bitacora.id_proyecto
-    )
-    db.add(new_bitacora)
-    db.commit()
-    db.refresh(new_bitacora)
-    print(new_bitacora.usuario.__dict__)  # Confirmar qué campos tiene usuario
-
-    # Construir los objetos anidados usando from_orm
-    usuario_data = User.from_orm(new_bitacora.usuario) if new_bitacora.usuario else None
-    vehiculo_data = Vehiculo.from_orm(new_bitacora.vehiculo) if new_bitacora.vehiculo else None
-    gasolinera_data = GasolineraSchema.from_orm(new_bitacora.gasolinera) if new_bitacora.gasolinera else None
-    proyecto_data = ProyectoSchema.from_orm(new_bitacora.proyecto) if new_bitacora.proyecto else None
-
-
-    # Retornar el objeto de respuesta completo
-    return BitacoraSchema(
-        id_bitacora=new_bitacora.id_bitacora,
-        created_at=new_bitacora.created_at,
-        comentario=new_bitacora.comentario,
-        km_inicial=new_bitacora.km_inicial,
-        km_final=new_bitacora.km_final,
-        num_galones=new_bitacora.num_galones,
-        costo=new_bitacora.costo,
-        tipo_gasolina=new_bitacora.tipo_gasolina,
-        id_usr=new_bitacora.id_usr,
-        id_vehiculo=new_bitacora.id_vehiculo,
-        id_gasolinera=new_bitacora.id_gasolinera,
-        id_proyecto=new_bitacora.id_proyecto,
-        usuario=usuario_data,
-        vehiculo=vehiculo_data,
-        gasolinera=gasolinera_data,
-        proyecto=proyecto_data
-    )
+    try:
+        new_bitacora = models.Bitacora(
+            created_at=bitacora.created_at,
+            comentario=bitacora.comentario,
+            km_inicial=bitacora.km_inicial,
+            km_final=bitacora.km_final,
+            num_galones=bitacora.num_galones,
+            costo=bitacora.costo,
+            tipo_gasolina=bitacora.tipo_gasolina,
+            id_usr=bitacora.id_usr,
+            id_vehiculo=bitacora.id_vehiculo,
+            id_gasolinera=bitacora.id_gasolinera,
+            id_proyecto=bitacora.id_proyecto
+        )
+        db.add(new_bitacora)
+        db.commit()
+        db.refresh(new_bitacora)
+        return BitacoraSchema.from_orm(new_bitacora)
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Foreign key constraint failed. Make sure all referenced IDs exist."
+        )
 
 # Actualizar una bitácora por ID
 @bitacora_router.put("/{id}", response_model=BitacoraSchema)
@@ -419,7 +409,28 @@ def update_bitacora(id: int, bitacora: BitacoraUpdateSchema, db: Session = Depen
     if db_bitacora is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bitacora not found")
 
-    # Actualiza solo los campos proporcionados
+    # Validar que las claves foráneas existen antes de realizar la actualización
+    if bitacora.id_usr is not None:
+        if not db.query(models.Usuario).filter(models.Usuario.id_usr == bitacora.id_usr).first():
+            raise HTTPException(status_code=400, detail="User not found")
+        db_bitacora.id_usr = bitacora.id_usr
+
+    if bitacora.id_vehiculo is not None:
+        if not db.query(models.Vehiculo).filter(models.Vehiculo.id_vehiculo == bitacora.id_vehiculo).first():
+            raise HTTPException(status_code=400, detail="Vehicle not found")
+        db_bitacora.id_vehiculo = bitacora.id_vehiculo
+
+    if bitacora.id_gasolinera is not None:
+        if not db.query(models.Gasolinera).filter(models.Gasolinera.id_gasolinera == bitacora.id_gasolinera).first():
+            raise HTTPException(status_code=400, detail="Gas station not found")
+        db_bitacora.id_gasolinera = bitacora.id_gasolinera
+
+    if bitacora.id_proyecto is not None:
+        if not db.query(models.Proyecto).filter(models.Proyecto.id_proyecto == bitacora.id_proyecto).first():
+            raise HTTPException(status_code=400, detail="Project not found")
+        db_bitacora.id_proyecto = bitacora.id_proyecto
+
+    # Actualiza los demás campos proporcionados
     if bitacora.created_at is not None:
         db_bitacora.created_at = bitacora.created_at
     if bitacora.comentario is not None:
@@ -434,21 +445,20 @@ def update_bitacora(id: int, bitacora: BitacoraUpdateSchema, db: Session = Depen
         db_bitacora.costo = bitacora.costo
     if bitacora.tipo_gasolina is not None:
         db_bitacora.tipo_gasolina = bitacora.tipo_gasolina
-    if bitacora.id_usr is not None:
-        db_bitacora.id_usr = bitacora.id_usr
-    if bitacora.id_vehiculo is not None:
-        db_bitacora.id_vehiculo = bitacora.id_vehiculo
-    if bitacora.id_gasolinera is not None:
-        db_bitacora.id_gasolinera = bitacora.id_gasolinera
-    if bitacora.id_proyecto is not None:
-        db_bitacora.id_proyecto = bitacora.id_proyecto
 
     # Guarda los cambios en la base de datos
-    db.commit()
-    db.refresh(db_bitacora)
+    try:
+        db.commit()
+        db.refresh(db_bitacora)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Failed to update Bitacora due to foreign key constraints"
+        )
 
     # Retorna el objeto actualizado
-    return db_bitacora
+    return BitacoraSchema.from_orm(db_bitacora)
 
 
 
