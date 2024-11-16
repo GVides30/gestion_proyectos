@@ -16,16 +16,15 @@ class User(BaseModel):
     id: Optional[int] = Field(alias="id_usr")
     created_at: Optional[datetime]
     name: str = Field(alias="nombre")
-    apellido: str  # Nuevo campo para incluir el apellido
+    apellido: str
     password: str
     username: str
-    active: Optional[bool] = True  # Refleja el campo `activo` en tu modelo de base de datos
-    rol: Optional[RolSchema]
+    active: Optional[bool] = True
+    id_rol: Optional[int]  # Aquí se usa solo `id_rol`
 
     class Config:
-        orm_mode = True  # Habilita el soporte para objetos ORM
         from_attributes = True
-        allow_population_by_field_name = True
+        populate_by_name = True
 
 class Vehiculo(BaseModel):
     id_vehiculo: Optional[int]  # Opcional para que se incluya en la respuesta

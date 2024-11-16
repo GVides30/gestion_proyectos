@@ -25,58 +25,40 @@ def get_users_count(db: Session = Depends(get_db)):
     return {"total": result}
 
 # Obtener un usuario por ID
-@user.get("/users/{id}", tags=["users"], response_model=User, description="Get a single user by Id")
+@user.get("/users/{id}", tags=["users"], response_model=User)
 def get_user(id: int, db: Session = Depends(get_db)):
-    # Buscar el usuario en la base de datos
     db_user = db.query(models.Usuario).filter(models.Usuario.id_usr == id).first()
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")
-
-    # Retornar el objeto utilizando `from_orm` para mapear los datos del modelo ORM al esquema Pydantic
     return User.from_orm(db_user)
 
 
-
-@user.post("/", tags=["users"], response_model=User, description="Create a new user")
+#Crear un usuario
+@user.post("/", tags=["users"], response_model=User)
 def create_user(user: User, db: Session = Depends(get_db)):
-
-    # Verifica si el rol existe
-    if user.rol and not db.query(models.Rol).filter(models.Rol.id_rol == user.rol.id_rol).first():
-        raise HTTPException(status_code=400, detail="El rol especificado no existe | Por favor revise los roles disponibles")
-
-    # Verificar si el nombre de usuario ya existe
-    existing_user = db.query(models.Usuario).filter(models.Usuario.username == user.username).first()
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Username already exists")
-    
-    # Crear el nuevo usuario
     new_user = models.Usuario(
         created_at=user.created_at,
         nombre=user.name,
         apellido=user.apellido,
         password=f.encrypt(user.password.encode("utf-8")),
-        activo=user.active if user.active is not None else True,
+        activo=user.active,
         username=user.username,
-        id_rol=user.rol.id_rol if user.rol else None
+        id_rol=user.id_rol  # Aquí solo pasamos el id_rol
     )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
-
-    # Usar `from_orm` para mapear el modelo de base de datos a un esquema Pydantic
     return User.from_orm(new_user)
 
 
 
 # Actualizar un usuario por ID
-@user.put("/users/{id}", tags=["users"], response_model=User, description="Update a User by Id")
+@user.put("/users/{id}", tags=["users"], response_model=User)
 def update_user(id: int, user: User, db: Session = Depends(get_db)):
-    # Busca el usuario en la base de datos
     db_user = db.query(models.Usuario).filter(models.Usuario.id_usr == id).first()
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Actualiza los campos proporcionados en la solicitud
     if user.created_at is not None:
         db_user.created_at = user.created_at
     if user.name is not None:
@@ -89,15 +71,13 @@ def update_user(id: int, user: User, db: Session = Depends(get_db)):
         db_user.username = user.username
     if user.active is not None:
         db_user.activo = user.active
-    if user.rol and user.rol.id_rol is not None:
-        db_user.id_rol = user.rol.id_rol
+    if user.id_rol is not None:  # Aquí actualizamos solo el id_rol
+        db_user.id_rol = user.id_rol
 
-    # Guarda los cambios en la base de datos
     db.commit()
-    db.refresh(db_user)  # Refresca el objeto actualizado
-
-    # Retorna el objeto actualizado utilizando `from_orm`
+    db.refresh(db_user)
     return User.from_orm(db_user)
+
 
 
 @user.delete("/users/{id}", tags=["users"], status_code=status.HTTP_204_NO_CONTENT, description="Delete a User by Id")
