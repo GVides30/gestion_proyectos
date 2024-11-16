@@ -27,21 +27,14 @@ def get_users_count(db: Session = Depends(get_db)):
 # Obtener un usuario por ID
 @user.get("/users/{id}", tags=["users"], response_model=User, description="Get a single user by Id")
 def get_user(id: int, db: Session = Depends(get_db)):
+    # Buscar el usuario en la base de datos
     db_user = db.query(models.Usuario).filter(models.Usuario.id_usr == id).first()
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Retorna un objeto User construido con los datos obtenidos
-    return User(
-        id=db_user.id_usr,
-        created_at=db_user.created_at,
-        name=db_user.nombre,
-        apellido=db_user.apellido,
-        password=db_user.password,
-        username=db_user.username,
-        active=db_user.activo,
-        rol=db_user.rol
-    )
+    # Retornar el objeto utilizando `from_orm` para mapear los datos del modelo ORM al esquema Pydantic
+    return User.from_orm(db_user)
+
 
 
 @user.post("/", tags=["users"], response_model=User, description="Create a new user")
@@ -78,32 +71,33 @@ def create_user(user: User, db: Session = Depends(get_db)):
 # Actualizar un usuario por ID
 @user.put("/users/{id}", tags=["users"], response_model=User, description="Update a User by Id")
 def update_user(id: int, user: User, db: Session = Depends(get_db)):
+    # Busca el usuario en la base de datos
     db_user = db.query(models.Usuario).filter(models.Usuario.id_usr == id).first()
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Actualiza los campos
-    db_user.created_at=user.created_at
-    db_user.nombre = user.name
-    db_user.apellido = user.apellido
-    if user.password:
+    # Actualiza los campos proporcionados en la solicitud
+    if user.created_at is not None:
+        db_user.created_at = user.created_at
+    if user.name is not None:
+        db_user.nombre = user.name
+    if user.apellido is not None:
+        db_user.apellido = user.apellido
+    if user.password is not None:
         db_user.password = f.encrypt(user.password.encode("utf-8"))
-    db_user.username = user.username
-    db_user.activo = user.active if user.active is not None else db_user.activo
-    db_user.id_rol = user.rol.id_rol if user.rol else db_user.id_rol
+    if user.username is not None:
+        db_user.username = user.username
+    if user.active is not None:
+        db_user.activo = user.active
+    if user.rol and user.rol.id_rol is not None:
+        db_user.id_rol = user.rol.id_rol
 
+    # Guarda los cambios en la base de datos
     db.commit()
     db.refresh(db_user)  # Refresca el objeto actualizado
-    return User(
-        id=db_user.id_usr,         # Mapea id_usr a id en el modelo Pydantic
-        created_at=db_user.created_at,
-        name=db_user.nombre,
-        apellido=db_user.apellido,
-        password=db_user.password,
-        username=db_user.username,
-        active=db_user.activo,
-        rol=db_user.rol
-    )
+
+    # Retorna el objeto actualizado utilizando `from_orm`
+    return User.from_orm(db_user)
 
 
 @user.delete("/users/{id}", tags=["users"], status_code=status.HTTP_204_NO_CONTENT, description="Delete a User by Id")
