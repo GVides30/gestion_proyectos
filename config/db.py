@@ -1,10 +1,9 @@
-# config/db.py
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# Configura la URL de conexión a tu base de datos
-DATABASE_URL = "mysql+pymysql://root:password@localhost/gestion_proyectos"
+# Configura la URL de conexión a PostgreSQL
+DATABASE_URL = "postgresql+psycopg2://postgres:password@localhost:5432/gestion_proyectos"
 
 # Crea el motor de la base de datos
 engine = create_engine(DATABASE_URL)
