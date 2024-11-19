@@ -1,6 +1,7 @@
 import flet as ft
 from login import login_view
 from registrar import registrar_view
+from zona_admin import zona_admin_view 
 
 def main(page: ft.Page):
     def route_change(route):
@@ -47,6 +48,13 @@ def main(page: ft.Page):
                 ft.View(
                     "/registrar",
                     [registrar_view(page)],
+                )
+            )
+        elif page.route == "/zona_admin":  # Agregar esta condición para la nueva ruta
+            page.views.append(
+                ft.View(
+                    "/zona_admin",
+                    [zona_admin_view(page)],  # Llama a la vista de zona_admin
                 )
             )
         page.update()

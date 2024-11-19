@@ -22,5 +22,5 @@ tags_metadata = [
  {
      "name":"bitacoras",
      "description":"bitacoras endpoint"
- }
+ },
 ]

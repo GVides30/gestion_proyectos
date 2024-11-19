@@ -10,14 +10,19 @@ from starlette.status import HTTP_204_NO_CONTENT
 from cryptography.fernet import Fernet
 from models.models import Proyecto,Gasolinera # Importa tu modelo de Proyecto
 from schemas.schema import Proyecto as ProyectoSchema,GasolineraSchema,RolSchema, BitacoraSchema, BitacoraCreateSchema, BitacoraUpdateSchema # Importa el esquema Pydantic correspondiente
+import os
 
 # Inicializa el encriptador de contraseña
-key = Fernet.generate_key()
-f = Fernet(key)
+key = os.getenv("FERNET_KEY")
+if not key:
+    raise ValueError("No se encontró la clave FERNET_KEY en las variables de entorno")
+
+# Inicializar Fernet con la clave
+f = Fernet(key.encode("utf-8"))
+print("FERNET_KEY:", os.getenv("FERNET_KEY"))
 
 # Configura el enrutador de FastAPI
 user = APIRouter()
-
 
 # Ruta para contar usuarios
 @user.get("/users/count", tags=["users"], response_model=UserCount)
@@ -41,7 +46,7 @@ def create_user(user: User, db: Session = Depends(get_db)):
         created_at=user.created_at,
         nombre=user.name,
         apellido=user.apellido,
-        password=f.encrypt(user.password.encode("utf-8")),
+        password=f.encrypt(user.password.encode("utf-8")).decode("utf-8"),
         activo=user.active,
         username=user.username,
         id_rol=user.id_rol  # Aquí solo pasamos el id_rol
@@ -94,6 +99,43 @@ def delete_user(id: int, db: Session = Depends(get_db)):
     db.delete(db_user)
     db.commit()
     return {"message": "User successfully deleted"}# 204 No Content indica que no se necesita devolver datos
+
+
+#Login
+
+app = APIRouter()
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+from models import models
+from config.db import get_db
+from cryptography.fernet import Fernet
+
+app = APIRouter()
+
+@app.post("/login")
+def login(username: str = Query(...), password: str = Query(...), db: Session = Depends(get_db)):
+    # Buscar usuario por nombre de usuario
+    db_user = db.query(models.Usuario).filter(models.Usuario.username == username).first()
+    if not db_user:
+        raise HTTPException(status_code=401, detail="Usuario no encontrado")
+
+    # Verificar la contraseña
+    try:
+        if not f.decrypt(db_user.password.encode("utf-8")).decode("utf-8") == password:
+            raise HTTPException(status_code=401, detail="Contraseña incorrecta")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Error al validar la contraseña")
+
+    # Si todo está bien, retorna los datos del usuario
+    return {
+        "id_usr": db_user.id_usr,
+        "name": db_user.nombre,
+        "apellido": db_user.apellido,
+        "activo": db_user.activo,
+    }
+
+
 
 # Configura el enrutador de FastAPI para vehiculos
 vehiculo = APIRouter()
