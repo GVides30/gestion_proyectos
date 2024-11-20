@@ -74,13 +74,13 @@ def update_user(id: int, user: User, db: Session = Depends(get_db)):
         db_user.nombre = user.name
     if user.apellido is not None:
         db_user.apellido = user.apellido
-    if user.password is not None:
-        db_user.password = f.encrypt(user.password.encode("utf-8"))
+    if user.password is not None and user.password != "******":  # Solo cifrar si no es "******"
+        db_user.password = f.encrypt(user.password.encode("utf-8")).decode("utf-8")
     if user.username is not None:
         db_user.username = user.username
     if user.active is not None:
         db_user.activo = user.active
-    if user.id_rol is not None:  # Aquí actualizamos solo el id_rol
+    if user.id_rol is not None:
         db_user.id_rol = user.id_rol
 
     db.commit()
