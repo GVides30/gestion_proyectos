@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException,status
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError
 from config.db import get_db  # Asegúrate de que get_db esté configurado para obtener la sesión de la base de datos
 from models import models  # Importa tus modelos (Usuario, etc.)
@@ -8,7 +8,7 @@ from schemas.schema import User, UserCount, Vehiculo
 from typing import List
 from starlette.status import HTTP_204_NO_CONTENT
 from cryptography.fernet import Fernet
-from models.models import Proyecto,Gasolinera # Importa tu modelo de Proyecto
+from models.models import Proyecto,Gasolinera, Log # Importa tu modelo de Proyecto
 from schemas.schema import Proyecto as ProyectoSchema,GasolineraSchema,RolSchema, BitacoraSchema, BitacoraCreateSchema, BitacoraUpdateSchema # Importa el esquema Pydantic correspondiente
 import os
 
@@ -25,10 +25,13 @@ print("FERNET_KEY:", os.getenv("FERNET_KEY"))
 user = APIRouter()
 
 # Ruta para contar usuarios
-@user.get("/users/count", tags=["users"], response_model=UserCount)
-def get_users_count(db: Session = Depends(get_db)):
-    result = db.query(func.count(models.Usuario.id_usr)).scalar()
-    return {"total": result}
+@user.get("/users", tags=["users"], response_model=List[User])
+def get_users(db: Session = Depends(get_db)):
+    users = db.query(models.Usuario).all()
+    if not users:
+        raise HTTPException(status_code=404, detail="No users found")
+    return [User.from_orm(user) for user in users]
+
 
 # Obtener un usuario por ID
 @user.get("/users/{id}", tags=["users"], response_model=User)
@@ -141,10 +144,13 @@ def login(username: str = Query(...), password: str = Query(...), db: Session = 
 vehiculo = APIRouter()
 
 # Ruta para contar vehículos
-@vehiculo.get("/vehiculos/count", tags=["vehiculos"])
-def get_vehiculos_count(db: Session = Depends(get_db)):
-    result = db.query(func.count(models.Vehiculo.id_vehiculo)).scalar()
-    return {"total": result}
+@vehiculo.get("/vehiculos", tags=["vehiculos"], response_model=List[Vehiculo], description="Get all vehicles")
+def get_vehiculos(db: Session = Depends(get_db)):
+    vehiculos = db.query(models.Vehiculo).all()
+    if not vehiculos:
+        raise HTTPException(status_code=404, detail="No vehicles found")
+    return [Vehiculo.from_orm(vehiculo) for vehiculo in vehiculos]
+
 
 # Obtener un vehículo por ID
 @vehiculo.get("/vehiculos/{id}", tags=["vehiculos"], response_model=Vehiculo, description="Get a single vehicle by Id")
@@ -514,3 +520,10 @@ def delete_bitacora(id: int, db: Session = Depends(get_db)):
     db.delete(db_bitacora)
     db.commit()
     return {"message": "Bitacora successfully deleted"}
+
+log_router = APIRouter()
+
+@log_router.get("/logs", tags=["logs"])
+def get_logs(db: Session = Depends(get_db)):
+    logs = db.query(Log).all()
+    return logs

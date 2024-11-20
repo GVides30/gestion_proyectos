@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from routes.routes import user, vehiculo, proyecto, gasolinera, roles, bitacora_router, app as login_router
+from routes.routes import user, vehiculo, proyecto, gasolinera, roles, bitacora_router, app as login_router, log_router
 from config.openapi import tags_metadata
 
 app = FastAPI(
@@ -17,4 +17,5 @@ app.include_router(gasolinera)
 app.include_router(roles)
 app.include_router(bitacora_router)
 app.include_router(login_router, prefix="/login", tags=["login"]) 
+app.include_router(log_router)
 
