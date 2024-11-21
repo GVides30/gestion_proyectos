@@ -1,0 +1,295 @@
+import flet as ft
+import requests
+from datetime import datetime
+
+BACKEND_URL = "http://127.0.0.1:8000"  # Cambia según tu configuración
+
+def pantalla_bitacora(page: ft.Page):
+    tabla_datos = ft.DataTable(
+        columns=[],
+        rows=[],
+    )
+    fila_seleccionada = None  # Variable para almacenar la fila seleccionada
+
+    def cargar_bitacora():
+        """Cargar los datos de la bitácora desde el backend."""
+        try:
+            response = requests.get(f"{BACKEND_URL}/bitacoras")
+            if response.status_code == 200:
+                datos = response.json()
+                if datos:
+                    columnas_visibles = ["id_bitacora", "created_at", "comentario", "km_inicial", "km_final",
+                                         "num_galones", "costo", "tipo_gasolina", "id_usr", "id_vehiculo", "id_gasolinera", "id_proyecto"]
+                    tabla_datos.columns = [
+                        ft.DataColumn(ft.Text(col)) for col in columnas_visibles
+                    ]
+                    tabla_datos.rows = [
+                        ft.DataRow(
+                            cells=[
+                                ft.DataCell(
+                                    ft.Text(
+                                        str(registro[col]) if col not in ["id_usr", "id_vehiculo", "id_gasolinera", "id_proyecto"]
+                                        else str(registro[col])
+                                    )
+                                )
+                                for col in columnas_visibles
+                            ],
+                            selected=False,
+                            on_select_changed=lambda e, idx=index: seleccionar_fila(idx)  # Evento de selección
+                        )
+                        for index, registro in enumerate(datos)
+                    ]
+                else:
+                    tabla_datos.columns = [
+                        ft.DataColumn(ft.Text("Información"))
+                    ]
+                    tabla_datos.rows = [
+                        ft.DataRow(cells=[ft.DataCell(ft.Text("No hay registros disponibles"))])
+                    ]
+            else:
+                page.snack_bar = ft.SnackBar(
+                    ft.Text(f"Error al cargar bitácoras: {response.status_code}"),
+                    bgcolor=ft.colors.RED,
+                )
+                page.snack_bar.open = True
+        except Exception as ex:
+            page.snack_bar = ft.SnackBar(
+                ft.Text(f"Error de conexión: {ex}"), bgcolor=ft.colors.RED
+            )
+            page.snack_bar.open = True
+        page.update()
+
+    def seleccionar_fila(idx):
+        """Manejar la selección de filas."""
+        nonlocal fila_seleccionada
+        for i, row in enumerate(tabla_datos.rows):
+            row.selected = (i == idx)  # Marcar la fila seleccionada
+        fila_seleccionada = tabla_datos.rows[idx]  # Guardar la fila seleccionada
+        page.update()
+
+    def agregar_registro(e):
+        """Agregar un nuevo registro a la bitácora."""
+        campos_input = {}
+        campos_formulario = []
+
+        # Obtén las cabeceras directamente desde las columnas de la tabla
+        for col in tabla_datos.columns:
+            columna_label = col.label.value
+            if columna_label not in ["id_bitacora", "created_at"]:  # Excluir columnas no modificables
+                input_field = ft.TextField(label=columna_label, value="", expand=True)
+                campos_formulario.append(input_field)
+                campos_input[columna_label] = input_field
+
+        def guardar_nuevo(e):
+            """Guardar el nuevo registro en el backend."""
+            nuevos_datos = {col: campo.value for col, campo in campos_input.items()}
+            nuevos_datos["created_at"] = datetime.now().isoformat()  # Agregar la fecha automáticamente
+            nuevos_datos[tabla_datos.columns[0].label.value] = None
+            print(nuevos_datos)
+            try:
+                response = requests.post(f"{BACKEND_URL}/bitacoras/", json=nuevos_datos)
+                if response.status_code in [200, 201]:
+                    page.snack_bar = ft.SnackBar(
+                        ft.Text("Registro agregado exitosamente."),
+                        bgcolor=ft.colors.GREEN,
+                    )
+                    cargar_bitacora()  # Recargar datos
+                else:
+                    page.snack_bar = ft.SnackBar(
+                        ft.Text(f"Error al agregar registro: {response.status_code}"),
+                        bgcolor=ft.colors.RED,
+                    )
+                page.snack_bar.open = True
+            except Exception as ex:
+                page.snack_bar = ft.SnackBar(
+                    ft.Text(f"Error de conexión: {ex}"), bgcolor=ft.colors.RED
+                )
+                page.snack_bar.open = True
+
+            page.dialog.open = False
+            page.update()
+
+        page.dialog = ft.AlertDialog(
+            title=ft.Text("Agregar Registro a Bitácora"),
+            content=ft.Column(campos_formulario, tight=True),
+            actions=[
+                ft.TextButton("Cancelar", on_click=cerrar_dialogo),
+                ft.TextButton("Guardar", on_click=guardar_nuevo),
+            ],
+        )
+        page.dialog.open = True
+        page.update()
+
+
+    def modificar_registro(e):
+        """Modificar un registro seleccionado."""
+        if fila_seleccionada:
+            registro_id = fila_seleccionada.cells[0].content.value  # ID del registro seleccionado
+            campos_input = {}
+            campos_formulario = []
+
+            # Obtener datos del registro seleccionado
+            registro_actual = {
+                col.label.value if hasattr(col, 'label') else col: fila_seleccionada.cells[i].content.value
+                for i, col in enumerate(tabla_datos.columns)
+            }
+
+            # Excluir el campo "created_at" y agregar campos editables
+            for col, valor in registro_actual.items():
+                if col != "created_at":  # Excluir el campo "created_at"
+                    input_field = ft.TextField(label=col, value=str(valor), expand=True)
+                    campos_formulario.append(input_field)
+                    campos_input[col.lower().replace(" ", "_")] = input_field
+
+            def guardar_modificacion(e):
+                """Guardar los cambios en el backend."""
+                try:
+                    # Construir los datos nuevos a partir de los campos editables
+                    nuevos_datos = {
+                        key: campo.value for key, campo in campos_input.items()
+                    }
+
+                    # Asegurarse de que los campos requeridos estén en el cuerpo
+                    nuevos_datos["id_bitacora"] = int(registro_id)  # Agregar el ID del registro
+                    nuevos_datos["created_at"] = registro_actual.get("created_at")  # Mantener created_at sin cambios
+
+                    # Convertir campos a enteros si es necesario
+                    for campo in ["id_usr", "id_vehiculo", "id_gasolinera", "id_proyecto", "km_inicial", "km_final", "num_galones", "costo"]:
+                        if campo in nuevos_datos and nuevos_datos[campo].isdigit():
+                            nuevos_datos[campo] = int(nuevos_datos[campo])
+
+                    print(f"Datos enviados para modificar: {nuevos_datos}")  # Depuración
+
+                    # Enviar solicitud PUT al backend
+                    response = requests.put(f"{BACKEND_URL}/bitacoras/{registro_id}", json=nuevos_datos)
+                    if response.status_code == 200:
+                        page.snack_bar = ft.SnackBar(
+                            ft.Text("Registro modificado exitosamente."),
+                            bgcolor=ft.colors.GREEN,
+                        )
+                        cargar_bitacora()  # Recargar datos
+                    else:
+                        error_message = response.json().get("detail", "Error desconocido")
+                        page.snack_bar = ft.SnackBar(
+                            ft.Text(f"Error al modificar registro: {error_message}"),
+                            bgcolor=ft.colors.RED,
+                        )
+                    page.snack_bar.open = True
+                except ValueError as ve:
+                    page.snack_bar = ft.SnackBar(
+                        ft.Text(f"Error en los datos: {ve}"), bgcolor=ft.colors.RED
+                    )
+                    page.snack_bar.open = True
+                except Exception as ex:
+                    page.snack_bar = ft.SnackBar(
+                        ft.Text(f"Error de conexión: {ex}"), bgcolor=ft.colors.RED
+                    )
+                    page.snack_bar.open = True
+
+                page.dialog.open = False
+                page.update()
+
+            # Crear diálogo para modificar registro
+            page.dialog = ft.AlertDialog(
+                title=ft.Text("Modificar Registro de Bitácora"),
+                content=ft.Column(campos_formulario),
+                actions=[
+                    ft.TextButton("Cancelar", on_click=lambda _: cerrar_dialogo()),
+                    ft.TextButton("Guardar", on_click=guardar_modificacion),
+                ],
+            )
+            page.dialog.open = True
+            page.update()
+        else:
+            page.snack_bar = ft.SnackBar(
+                ft.Text("Por favor, selecciona una fila para modificar."),
+                bgcolor=ft.colors.RED,
+            )
+            page.snack_bar.open = True
+
+
+
+    def eliminar_registro(e):
+        """Eliminar un registro seleccionado con confirmación."""
+        if fila_seleccionada:
+            # Obtener el ID del registro seleccionado
+            registro_id = fila_seleccionada.cells[0].content.value
+
+            # Función para confirmar la eliminación
+            def confirmar_eliminacion(e):
+                try:
+                    # Enviar solicitud DELETE al backend
+                    response = requests.delete(f"{BACKEND_URL}/bitacoras/{registro_id}")
+                    if response.status_code == 204:
+                        page.snack_bar = ft.SnackBar(
+                            ft.Text("Registro eliminado exitosamente."),
+                            bgcolor=ft.colors.GREEN,
+                        )
+                        cargar_bitacora()  # Recargar datos
+                    else:
+                        page.snack_bar = ft.SnackBar(
+                            ft.Text(f"Error al eliminar registro: {response.status_code}"),
+                            bgcolor=ft.colors.RED,
+                        )
+                    page.snack_bar.open = True
+                except Exception as ex:
+                    page.snack_bar = ft.SnackBar(
+                        ft.Text(f"Error de conexión: {ex}"), bgcolor=ft.colors.RED
+                    )
+                    page.snack_bar.open = True
+
+                # Cerrar el cuadro de confirmación
+                page.dialog.open = False
+                page.update()
+
+            # Crear cuadro de confirmación
+            page.dialog = ft.AlertDialog(
+                title=ft.Text("Confirmar Eliminación"),
+                content=ft.Text(f"¿Estás seguro de que deseas eliminar el registro con ID {registro_id}?"),
+                actions=[
+                    ft.TextButton("Cancelar", on_click=lambda _: cerrar_dialogo()),
+                    ft.TextButton("Eliminar", on_click=confirmar_eliminacion),
+                ],
+            )
+            page.dialog.open = True
+            page.update()
+        else:
+            # Mostrar mensaje si no hay fila seleccionada
+            page.snack_bar = ft.SnackBar(
+                ft.Text("Por favor, selecciona una fila para eliminar."),
+                bgcolor=ft.colors.RED,
+            )
+            page.snack_bar.open = True
+            page.update()
+
+    def cerrar_dialogo():
+        page.dialog.open = False
+        page.update()
+
+    # Cargar datos automáticamente al ingresar a la pantalla
+    cargar_bitacora()
+
+    botones_accion = ft.Row(
+        controls=[
+            ft.ElevatedButton("Agregar", icon=ft.icons.ADD, on_click=agregar_registro),
+            ft.ElevatedButton("Modificar", icon=ft.icons.EDIT, on_click=modificar_registro),
+            ft.ElevatedButton("Eliminar", icon=ft.icons.DELETE, on_click=eliminar_registro),
+        ]
+    )
+
+    tabla_datos_container = ft.ListView(
+        controls=[tabla_datos],
+        expand=True,  # Asegura que ocupe todo el espacio disponible
+    )
+
+    return ft.Container(
+        content=ft.Column(
+            [
+                ft.Text("Bitácora de Combustible", size=30, weight=ft.FontWeight.BOLD),
+                tabla_datos_container,
+                botones_accion,
+            ],
+            expand=True,
+        ),
+        expand=True,
+    )

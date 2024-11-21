@@ -37,8 +37,13 @@ def zona_admin_view(page: ft.Page):
                         for index, registro in enumerate(datos)
                     ]
                 else:
-                    tabla_datos.columns = []
-                    tabla_datos.rows = []
+                    tabla_datos.columns = [
+                        ft.DataColumn(ft.Text("Sin datos"))
+                    ]
+                    tabla_datos.rows = [
+                        ft.DataRow(cells=[ft.DataCell(ft.Text("No hay registros disponibles"))])
+                    ]
+
             else:
                 page.snack_bar = ft.SnackBar(
                     ft.Text(f"Error al cargar datos: {response.status_code}"),
@@ -310,11 +315,13 @@ def zona_admin_view(page: ft.Page):
 
     tabla_datos = ft.DataTable(
         columns=[
-            ft.DataColumn(ft.Text("ID")),  # Inicializar con columnas visibles
-            ft.DataColumn(ft.Text("Nombre")),
+            ft.DataColumn(ft.Text("Temporal"))  # Columna por defecto
         ],
-        rows=[],
+        rows=[
+            ft.DataRow(cells=[ft.DataCell(ft.Text("Seleccione una tabla para visualizar"))])
+        ],
     )
+
 
     toggle_button = ft.ElevatedButton(
         text="Ver Logs",
@@ -344,6 +351,16 @@ def zona_admin_view(page: ft.Page):
         visible=True,
     )
 
+    bitacora_button = ft.ElevatedButton(
+        text="Ir a Bitácora",
+        icon=ft.icons.BOOK,
+        on_click=lambda e: redirigir_a_bitacora(e),  # Redirige a la pantalla de bitácora
+    )
+
+    def redirigir_a_bitacora(e):
+        """Redirige a la pantalla de Bitácora"""
+        page.go("/bitacora")
+
 
     botones_accion = ft.Row(
         controls=[
@@ -351,6 +368,7 @@ def zona_admin_view(page: ft.Page):
             eliminar_button,
             modificar_button,  # Botón Modificar
             toggle_button,  # Botón Ver Logs
+            bitacora_button,
         ]
     )
 
@@ -360,11 +378,13 @@ def zona_admin_view(page: ft.Page):
             agregar_button.visible = False
             eliminar_button.visible = False
             modificar_button.visible = False
+            bitacora_button.visible = False
         else:
             # Mostrar botones solo cuando estamos en una tabla válida
             agregar_button.visible = True
             eliminar_button.visible = True
             modificar_button.visible = True
+            bitacora_button.visible = True
 
         # Mostrar el botón "Ver Logs" solo en la tabla de usuarios
         toggle_button.visible = tabla_actual == "users"

@@ -2,6 +2,8 @@ import flet as ft
 from login import login_view
 from registrar import registrar_view
 from zona_admin import zona_admin_view 
+from bitacora import pantalla_bitacora
+
 
 def main(page: ft.Page):
     def route_change(route):
@@ -26,6 +28,11 @@ def main(page: ft.Page):
                                         text="Ir al Login",
                                         on_click=lambda _: page.go("/login"),
                                     ),
+                                    ft.ElevatedButton(
+                                        text="Ir a Bitácora (Prueba)",
+                                        on_click=lambda _: page.go("/bitacora"),
+                                    )
+
                                 ],
                                 alignment=ft.MainAxisAlignment.CENTER,
                                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -57,6 +64,14 @@ def main(page: ft.Page):
                     [zona_admin_view(page)],  # Llama a la vista de zona_admin
                 )
             )
+        elif page.route == "/bitacora":  # Ruta para la bitácora
+            page.views.append(
+                ft.View(
+                    "/bitacora",
+                    [pantalla_bitacora(page)],  # Llama a la vista de bitácora
+                )
+            )
+
         page.update()
 
     page.on_route_change = route_change
