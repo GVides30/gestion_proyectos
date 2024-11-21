@@ -180,23 +180,29 @@ def zona_admin_view(page: ft.Page):
     
             # Crear una referencia global para los campos de entrada
             campos_input = {}
+
+            registro_actual = {
+                col.label.value if hasattr(col, 'label') else col: fila_seleccionada.cells[i].content.value
+                for i, col in enumerate(tabla_datos.columns)
+            }
     
             # Crear los TextFields para cada columna
             campos_formulario = []
             for columna, valor in datos_fila.items():
-                input_field = ft.TextField(
-                    label=columna,
-                    value=str(valor),
-                    expand=True,
-                )
-                campos_formulario.append(input_field)
-                campos_input[columna] = input_field
+                if columna != "created_at":  # Excluir el campo "created_at"
+                    input_field = ft.TextField(
+                        label=columna,
+                        value=str(valor),
+                        expand=True,
+                    )
+                    campos_formulario.append(input_field)
+                    campos_input[columna] = input_field
     
             # Función para manejar el guardado
             def guardar_modificacion(e):
                 nuevos_datos = {columna: campo.value for columna, campo in campos_input.items()}
                 print(f"Nuevos datos a guardar: {nuevos_datos}")
-    
+                nuevos_datos["created_at"] = registro_actual.get("created_at")
                 # Enviar los datos al backend
                 try:
                     response = requests.put(f"{BACKEND_URL}/{tabla_actual}/{nuevos_datos[tabla_datos.columns[0].label.value]}", json=nuevos_datos)

@@ -28,10 +28,6 @@ def main(page: ft.Page):
                                         text="Ir al Login",
                                         on_click=lambda _: page.go("/login"),
                                     ),
-                                    ft.ElevatedButton(
-                                        text="Ir a Bitácora (Prueba)",
-                                        on_click=lambda _: page.go("/bitacora"),
-                                    )
 
                                 ],
                                 alignment=ft.MainAxisAlignment.CENTER,

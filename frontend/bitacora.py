@@ -10,35 +10,18 @@ def pantalla_bitacora(page: ft.Page):
         rows=[],
     )
     fila_seleccionada = None  # Variable para almacenar la fila seleccionada
+    datos_originales = []
 
     def cargar_bitacora():
         """Cargar los datos de la bitácora desde el backend."""
+        nonlocal datos_originales
         try:
             response = requests.get(f"{BACKEND_URL}/bitacoras")
             if response.status_code == 200:
                 datos = response.json()
+                datos_originales = datos  # Guardar los datos originales
                 if datos:
-                    columnas_visibles = ["id_bitacora", "created_at", "comentario", "km_inicial", "km_final",
-                                         "num_galones", "costo", "tipo_gasolina", "id_usr", "id_vehiculo", "id_gasolinera", "id_proyecto"]
-                    tabla_datos.columns = [
-                        ft.DataColumn(ft.Text(col)) for col in columnas_visibles
-                    ]
-                    tabla_datos.rows = [
-                        ft.DataRow(
-                            cells=[
-                                ft.DataCell(
-                                    ft.Text(
-                                        str(registro[col]) if col not in ["id_usr", "id_vehiculo", "id_gasolinera", "id_proyecto"]
-                                        else str(registro[col])
-                                    )
-                                )
-                                for col in columnas_visibles
-                            ],
-                            selected=False,
-                            on_select_changed=lambda e, idx=index: seleccionar_fila(idx)  # Evento de selección
-                        )
-                        for index, registro in enumerate(datos)
-                    ]
+                    mostrar_datos(datos)  # Mostrar datos cargados
                 else:
                     tabla_datos.columns = [
                         ft.DataColumn(ft.Text("Información"))
@@ -58,6 +41,43 @@ def pantalla_bitacora(page: ft.Page):
             )
             page.snack_bar.open = True
         page.update()
+
+    def mostrar_datos(datos):
+        """Actualizar la tabla con los datos proporcionados."""
+        columnas_visibles = ["id_bitacora", "created_at", "comentario", "km_inicial", "km_final",
+                             "num_galones", "costo", "tipo_gasolina", "id_usr", "id_vehiculo", "id_gasolinera", "id_proyecto"]
+        tabla_datos.columns = [
+            ft.DataColumn(ft.Text(col)) for col in columnas_visibles
+        ]
+        tabla_datos.rows = [
+            ft.DataRow(
+                cells=[
+                    ft.DataCell(ft.Text(str(registro[col])))
+                    for col in columnas_visibles
+                ],
+                selected=False,
+                on_select_changed=lambda e, idx=index: seleccionar_fila(idx)
+            )
+            for index, registro in enumerate(datos)
+        ]
+        page.update()
+
+    def filtrar_datos(e):
+        """Filtrar datos por fecha y comentario."""
+        filtro_fecha = campo_fecha.value.strip()
+        filtro_comentario = campo_busqueda.value.strip().lower()
+
+        datos_filtrados = datos_originales
+        if filtro_fecha:
+            datos_filtrados = [
+                registro for registro in datos_filtrados if registro["created_at"].startswith(filtro_fecha)
+            ]
+        if filtro_comentario:
+            datos_filtrados = [
+                registro for registro in datos_filtrados if filtro_comentario in registro["comentario"].lower()
+            ]
+
+        mostrar_datos(datos_filtrados)
 
     def seleccionar_fila(idx):
         """Manejar la selección de filas."""
@@ -266,8 +286,41 @@ def pantalla_bitacora(page: ft.Page):
         page.dialog.open = False
         page.update()
 
+    def regresar(e):
+        """Redirigir al usuario a la zona de administración."""
+        page.go("/zona_admin")
+
+    # Botón regresar
+    boton_regresar = ft.ElevatedButton(
+        text="Regresar",
+        icon=ft.icons.ARROW_BACK,
+        on_click=regresar,
+    )
+
     # Cargar datos automáticamente al ingresar a la pantalla
     cargar_bitacora()
+
+    # Componentes de filtros
+    campo_fecha = ft.TextField(
+        label="Filtrar por fecha (YYYY-MM-DD)", width=200, on_change=filtrar_datos
+    )
+    campo_busqueda = ft.TextField(
+        label="Buscar por comentario",
+        width=200,
+        prefix_icon=ft.icons.SEARCH,
+        on_change=filtrar_datos    
+    )
+
+    # Filtrar y título
+    filtro_y_titulo = ft.Row(
+        controls=[
+            ft.Text("Bitácora de Combustible", size=30, weight=ft.FontWeight.BOLD),
+            campo_fecha,
+            campo_busqueda,
+            boton_regresar,
+        ],
+        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+    )
 
     botones_accion = ft.Row(
         controls=[
@@ -285,7 +338,7 @@ def pantalla_bitacora(page: ft.Page):
     return ft.Container(
         content=ft.Column(
             [
-                ft.Text("Bitácora de Combustible", size=30, weight=ft.FontWeight.BOLD),
+                filtro_y_titulo,
                 tabla_datos_container,
                 botones_accion,
             ],
