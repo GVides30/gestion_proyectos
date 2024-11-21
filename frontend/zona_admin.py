@@ -237,6 +237,60 @@ def zona_admin_view(page: ft.Page):
             page.snack_bar.open = True
             page.update()
 
+    def eliminar_fila(e):
+        if fila_seleccionada:
+            # Obtener el ID de la fila seleccionada (suponiendo que la primera columna es el ID)
+            id_fila = fila_seleccionada.cells[0].content.value
+
+            # Confirmar eliminación
+            def confirmar_eliminacion(e):
+                try:
+                    # Hacer una solicitud DELETE al backend
+                    response = requests.delete(f"{BACKEND_URL}/{tabla_actual}/{id_fila}")
+                    if response.status_code == 204:  # Código HTTP 204: No Content (eliminación exitosa)
+                        page.snack_bar = ft.SnackBar(
+                            ft.Text(f"Fila eliminada correctamente de la tabla {tabla_actual}"),
+                            bgcolor=ft.colors.GREEN,
+                        )
+                        cargar_datos_tabla(tabla_actual)  # Recargar la tabla
+                    else:
+                        error_message = response.json().get("detail", "Error desconocido")
+                        page.snack_bar = ft.SnackBar(
+                            ft.Text(f"Error al eliminar: {error_message}"),
+                            bgcolor=ft.colors.RED,
+                        )
+                    page.snack_bar.open = True
+                except Exception as ex:
+                    page.snack_bar = ft.SnackBar(
+                        ft.Text(f"Error de conexión: {ex}"), bgcolor=ft.colors.RED
+                    )
+                    page.snack_bar.open = True
+
+                # Cerrar el cuadro de confirmación
+                page.dialog.open = False
+                page.update()
+
+            # Cuadro de confirmación
+            page.dialog = ft.AlertDialog(
+                title=ft.Text(f"Eliminar fila de {tabla_actual.capitalize()}"),
+                content=ft.Text(f"¿Estás seguro de que deseas eliminar el registro con ID {id_fila}?"),
+                actions=[
+                    ft.TextButton("Cancelar", on_click=lambda _: cerrar_dialogo()),
+                    ft.TextButton("Eliminar", on_click=confirmar_eliminacion),
+                ],
+            )
+            page.dialog.open = True
+            page.update()
+        else:
+            # Mostrar un mensaje si no hay fila seleccionada
+            page.snack_bar = ft.SnackBar(
+                ft.Text("Por favor, selecciona una fila para eliminar."),
+                bgcolor=ft.colors.RED,
+            )
+            page.snack_bar.open = True
+            page.update()
+
+
     # Función para cerrar el diálogo
     def cerrar_dialogo():
         page.dialog.open = False
@@ -286,6 +340,7 @@ def zona_admin_view(page: ft.Page):
     eliminar_button = ft.ElevatedButton(
         text="Eliminar",
         icon=ft.icons.DELETE,
+        on_click=eliminar_fila,
         visible=True,
     )
 
