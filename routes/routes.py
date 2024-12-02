@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException,status
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
+from sqlalchemy import func, inspect, text
 from sqlalchemy.exc import IntegrityError
 from config.db import get_db  # Asegúrate de que get_db esté configurado para obtener la sesión de la base de datos
 from models import models  # Importa tus modelos (Usuario, etc.)
@@ -8,22 +8,41 @@ from schemas.schema import User, UserCount, Vehiculo
 from typing import List
 from starlette.status import HTTP_204_NO_CONTENT
 from cryptography.fernet import Fernet
-from models.models import Proyecto,Gasolinera # Importa tu modelo de Proyecto
+from models.models import Proyecto,Gasolinera, Log # Importa tu modelo de Proyecto
 from schemas.schema import Proyecto as ProyectoSchema,GasolineraSchema,RolSchema, BitacoraSchema, BitacoraCreateSchema, BitacoraUpdateSchema # Importa el esquema Pydantic correspondiente
-
+import os
+from config.db import get_db, Base
 # Inicializa el encriptador de contraseña
-key = Fernet.generate_key()
-f = Fernet(key)
+key = os.getenv("FERNET_KEY")
+if not key:
+    raise ValueError("No se encontró la clave FERNET_KEY en las variables de entorno")
+
+# Inicializar Fernet con la clave
+f = Fernet(key.encode("utf-8"))
+print("FERNET_KEY:", os.getenv("FERNET_KEY"))
 
 # Configura el enrutador de FastAPI
 user = APIRouter()
 
-
 # Ruta para contar usuarios
-@user.get("/users/count", tags=["users"], response_model=UserCount)
-def get_users_count(db: Session = Depends(get_db)):
-    result = db.query(func.count(models.Usuario.id_usr)).scalar()
-    return {"total": result}
+@user.get("/users", tags=["users"], response_model=List[User])
+def get_users(db: Session = Depends(get_db)):
+    users = db.query(models.Usuario).all()
+    if not users:
+        # Si la tabla está vacía, retornamos la estructura de la tabla
+        return [{
+            "id_usr": 0,
+            "created_at": "2024-11-30T04:28:22.956Z",
+            "nombre": "string",
+            "apellido": "string",
+            "password": "string",
+            "username": "string",
+            "active": True,
+            "id_rol": 0
+        }]
+    return [User.model_validate(user) for user in users] if users else []
+
+
 
 # Obtener un usuario por ID
 @user.get("/users/{id}", tags=["users"], response_model=User)
@@ -41,7 +60,7 @@ def create_user(user: User, db: Session = Depends(get_db)):
         created_at=user.created_at,
         nombre=user.name,
         apellido=user.apellido,
-        password=f.encrypt(user.password.encode("utf-8")),
+        password=f.encrypt(user.password.encode("utf-8")).decode("utf-8"),
         activo=user.active,
         username=user.username,
         id_rol=user.id_rol  # Aquí solo pasamos el id_rol
@@ -66,13 +85,13 @@ def update_user(id: int, user: User, db: Session = Depends(get_db)):
         db_user.nombre = user.name
     if user.apellido is not None:
         db_user.apellido = user.apellido
-    if user.password is not None:
-        db_user.password = f.encrypt(user.password.encode("utf-8"))
+    if user.password is not None and user.password != "******":  # Solo cifrar si no es "******"
+        db_user.password = f.encrypt(user.password.encode("utf-8")).decode("utf-8")
     if user.username is not None:
         db_user.username = user.username
     if user.active is not None:
         db_user.activo = user.active
-    if user.id_rol is not None:  # Aquí actualizamos solo el id_rol
+    if user.id_rol is not None:
         db_user.id_rol = user.id_rol
 
     db.commit()
@@ -95,14 +114,65 @@ def delete_user(id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "User successfully deleted"}# 204 No Content indica que no se necesita devolver datos
 
+
+#Login
+
+app = APIRouter()
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+from models import models
+from config.db import get_db
+from cryptography.fernet import Fernet
+
+app = APIRouter()
+
+@app.post("/login")
+def login(username: str = Query(...), password: str = Query(...), db: Session = Depends(get_db)):
+    # Buscar usuario por nombre de usuario
+    db_user = db.query(models.Usuario).filter(models.Usuario.username == username).first()
+    if not db_user:
+        raise HTTPException(status_code=401, detail="Usuario no encontrado")
+
+    # Verificar la contraseña
+    try:
+        if not f.decrypt(db_user.password.encode("utf-8")).decode("utf-8") == password:
+            raise HTTPException(status_code=401, detail="Contraseña incorrecta")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Error al validar la contraseña")
+
+    # Si todo está bien, retorna los datos del usuario
+    return {
+        "id_usr": db_user.id_usr,
+        "name": db_user.nombre,
+        "apellido": db_user.apellido,
+        "activo": db_user.activo,
+    }
+
+
+
 # Configura el enrutador de FastAPI para vehiculos
 vehiculo = APIRouter()
 
 # Ruta para contar vehículos
-@vehiculo.get("/vehiculos/count", tags=["vehiculos"])
-def get_vehiculos_count(db: Session = Depends(get_db)):
-    result = db.query(func.count(models.Vehiculo.id_vehiculo)).scalar()
-    return {"total": result}
+@vehiculo.get("/vehiculos", tags=["vehiculos"], response_model=List[Vehiculo])
+def get_vehiculos(db: Session = Depends(get_db)):
+    vehiculos = db.query(models.Vehiculo).all()
+    if not vehiculos:
+        # Si la tabla está vacía, retornamos la estructura de la tabla
+        return [{
+            "id_vehiculo": 0,
+            "created_at": "2024-11-30T04:28:06.096Z",
+            "modelo": "string",
+            "marca": "string",
+            "placa": "string",
+            "rendimiento": 0,
+            "galonaje": 0,
+            "tipo_combustible": "string"
+        }]
+    return vehiculos
+
+
 
 # Obtener un vehículo por ID
 @vehiculo.get("/vehiculos/{id}", tags=["vehiculos"], response_model=Vehiculo, description="Get a single vehicle by Id")
@@ -192,9 +262,18 @@ def delete_vehiculo(id: int, db: Session = Depends(get_db)):
 proyecto = APIRouter()
 
 # Ruta para obtener la lista de todos los proyectos
-@proyecto.get("/proyectos", tags=["proyectos"], response_model=List[ProyectoSchema], description="Get all projects")
+@proyecto.get("/proyectos", tags=["proyectos"], response_model=List[ProyectoSchema])
 def get_proyectos(db: Session = Depends(get_db)):
     proyectos = db.query(Proyecto).all()
+    if not proyectos:
+        # Si la tabla está vacía, retornamos la estructura de la tabla
+        return [{
+            "id_proyecto": 0,
+            "created_at": "2024-11-30T04:27:52.535Z",
+            "nombre": "string",
+            "direccion": "string",
+            "activo": True
+        }]
     return proyectos
 
 # Ruta para obtener un proyecto por ID
@@ -255,7 +334,17 @@ gasolinera = APIRouter()
 @gasolinera.get("/gasolineras", tags=["gasolineras"], response_model=List[GasolineraSchema])
 def get_all_gasolineras(db: Session = Depends(get_db)):
     gasolineras = db.query(Gasolinera).all()
+    if not gasolineras:
+        # Si la tabla está vacía, retornamos la estructura de la tabla
+        return [{
+            "id_gasolinera": 0,
+            "created_at": "2024-11-30T04:27:19.687Z",
+            "nombre": "string",
+            "direccion": "string"
+        }]
     return gasolineras
+
+
 
 # Ruta para obtener una gasolinera por ID
 @gasolinera.get("/gasolineras/{id}", tags=["gasolineras"], response_model=GasolineraSchema, description="Get a single gasolinera by Id")
@@ -364,13 +453,10 @@ bitacora_router = APIRouter(
 )
 
 # Obtener todas las bitácoras
-@bitacora_router.get("/", response_model=List[BitacoraSchema], status_code=status.HTTP_200_OK)
+@bitacora_router.get("/", response_model=List[BitacoraSchema])
 def get_all_bitacoras(db: Session = Depends(get_db)):
-    # Consulta todas las bitácoras en la base de datos
     bitacoras = db.query(models.Bitacora).all()
-    
-    # Retorna la lista de bitácoras
-    return [BitacoraSchema.from_orm(bitacora) for bitacora in bitacoras]
+    return bitacoras
 
 
 # Crear una nueva bitácora
@@ -472,3 +558,10 @@ def delete_bitacora(id: int, db: Session = Depends(get_db)):
     db.delete(db_bitacora)
     db.commit()
     return {"message": "Bitacora successfully deleted"}
+
+log_router = APIRouter()
+
+@log_router.get("/logs", tags=["logs"])
+def get_logs(db: Session = Depends(get_db)):
+    logs = db.query(Log).all()
+    return logs
