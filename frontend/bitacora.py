@@ -92,19 +92,25 @@ def pantalla_bitacora(page: ft.Page):
         campos_input = {}
         campos_formulario = []
 
-        # Obtén las cabeceras directamente desde las columnas de la tabla
-        for col in tabla_datos.columns:
-            columna_label = col.label.value
-            if columna_label not in ["id_bitacora", "created_at"]:  # Excluir columnas no modificables
-                input_field = ft.TextField(label=columna_label, value="", expand=True)
-                campos_formulario.append(input_field)
-                campos_input[columna_label] = input_field
+        # Definir las cabeceras para los campos a agregar, excluyendo id_bitacora y created_at
+        columnas_visibles = ["comentario", "km_inicial", "km_final", "num_galones", "costo", "tipo_gasolina", "id_usr", "id_vehiculo", "id_gasolinera", "id_proyecto"]
+
+        # Crear los campos de entrada para cada columna
+        for columna_label in columnas_visibles:
+            input_field = ft.TextField(
+                label=columna_label, 
+                value="", 
+                expand=True,  
+                width=500,   
+            )
+            campos_formulario.append(input_field)
+            campos_input[columna_label] = input_field
 
         def guardar_nuevo(e):
             """Guardar el nuevo registro en el backend."""
             nuevos_datos = {col: campo.value for col, campo in campos_input.items()}
             nuevos_datos["created_at"] = datetime.now().isoformat()  # Agregar la fecha automáticamente
-            nuevos_datos[tabla_datos.columns[0].label.value] = None
+            nuevos_datos["id_bitacora"] = 0  # Asegurarse de que el ID sea 0 para la auto-generación
             print(nuevos_datos)
             try:
                 response = requests.post(f"{BACKEND_URL}/bitacoras/", json=nuevos_datos)
@@ -131,14 +137,19 @@ def pantalla_bitacora(page: ft.Page):
 
         page.dialog = ft.AlertDialog(
             title=ft.Text("Agregar Registro a Bitácora"),
-            content=ft.Column(campos_formulario, tight=True),
+            content=ft.Column(
+                campos_formulario, 
+                tight=False,  # Puedes ajustar esto para mejorar el espaciado
+                spacing=15,  # Espaciado entre los campos
+            ),
             actions=[
-                ft.TextButton("Cancelar", on_click=cerrar_dialogo),
+                ft.TextButton("Cancelar", on_click=lambda _:cerrar_dialogo()),
                 ft.TextButton("Guardar", on_click=guardar_nuevo),
             ],
         )
         page.dialog.open = True
         page.update()
+
 
 
     def modificar_registro(e):

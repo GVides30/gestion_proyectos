@@ -10,32 +10,56 @@ def zona_admin_view(page: ft.Page):
     mostrando_logs = False  # Variable para el estado del botón toggle
     fila_seleccionada = None  # Variable para almacenar la fila seleccionada
 
+    # Definir la tabla de datos y sus columnas (por defecto, vacía)
+    tabla_datos = ft.DataTable(
+        columns=[],  # Inicializamos con una lista vacía, las columnas se agregarán luego
+    )
+
     def cargar_datos_tabla(tabla):
         try:
             response = requests.get(f"{BACKEND_URL}/{tabla}")
             if response.status_code == 200:
                 datos = response.json()
+
+                # Verificar si los datos contienen registros con ID = 0
                 if datos:
-                    # Configurar columnas
-                    tabla_datos.columns = [
-                        ft.DataColumn(ft.Text(col)) for col in datos[0].keys()
-                    ]
-                    # Configurar filas
-                    tabla_datos.rows = [
-                        ft.DataRow(
-                            cells=[
-                                ft.DataCell(
-                                    ft.Text(
-                                        str(campo) if col != "password" else "******"
-                                    )
-                                )
-                                for col, campo in registro.items()
-                            ],
-                            selected=False,  # Por defecto no está seleccionada
-                            on_select_changed=lambda e, idx=index: seleccionar_fila(e, idx)
+                    # Verificar si alguna fila tiene id=0 en las columnas de identificación
+                    datos_validos = [
+                        registro for registro in datos
+                        if not any(
+                            registro.get(col) == 0
+                            for col in ["id_bitacora", "id_proyecto", "id_usr", "id_vehiculo", "id_gasolinera"]
                         )
-                        for index, registro in enumerate(datos)
                     ]
+                    
+                    if datos_validos:
+                        # Configurar columnas de la tabla
+                        tabla_datos.columns = [
+                            ft.DataColumn(ft.Text(col)) for col in datos[0].keys()
+                        ]
+                        # Configurar filas de la tabla
+                        tabla_datos.rows = [
+                            ft.DataRow(
+                                cells=[
+                                    ft.DataCell(
+                                        ft.Text(
+                                            str(campo) if col != "password" else "******"
+                                        )
+                                    )
+                                    for col, campo in registro.items()
+                                ],
+                                selected=False,  # Por defecto no está seleccionada
+                                on_select_changed=lambda e, idx=index: seleccionar_fila(e, idx)
+                            )
+                            for index, registro in enumerate(datos_validos)
+                        ]
+                    else:
+                        tabla_datos.columns = [
+                            ft.DataColumn(ft.Text("Sin datos"))
+                        ]
+                        tabla_datos.rows = [
+                            ft.DataRow(cells=[ft.DataCell(ft.Text("No hay registros disponibles"))])
+                        ]
                 else:
                     tabla_datos.columns = [
                         ft.DataColumn(ft.Text("Sin datos"))
@@ -87,9 +111,8 @@ def zona_admin_view(page: ft.Page):
         actualizar_botones()  # Actualizar visibilidad de botones
         page.update()
 
-
     def agregar_nuevo(e):
-    # Validar si se ha seleccionado una tabla válida
+        # Validar si se ha seleccionado una tabla válida
         if not tabla_actual or tabla_actual in ["logs", ""]:  # Validar que no sea "logs" o esté vacío
             page.snack_bar = ft.SnackBar(
                 ft.Text("Por favor, selecciona una tabla válida antes de agregar."),
@@ -102,28 +125,68 @@ def zona_admin_view(page: ft.Page):
         # Crear una referencia global para los campos de entrada
         campos_input = {}
 
-        # Crear los TextFields para cada columna excepto los campos excluidos
+        # Crear los TextFields para cada columna, excepto las que son auto-generadas (id_*)
         campos_formulario = []
-        for index, columna in enumerate(tabla_datos.columns):
-            if index != 0 and columna.label.value != "created_at":  # Excluir la primera columna (asumida como PK) y "created_at"
-                input_field = ft.TextField(
-                    label=columna.label.value,
-                    value="",  # Por defecto vacío para nuevos registros
-                    expand=True,
-                )
-                campos_formulario.append(input_field)
-                campos_input[columna.label.value] = input_field
+        if tabla_actual == "users":
+            columnas = ["username", "email", "role", "password"]
+        elif tabla_actual == "vehiculos":
+            columnas = ["modelo", "marca", "placa", "rendimiento", "galonaje", "tipo_combustible"]
+        elif tabla_actual == "gasolineras":
+            columnas = ["nombre", "direccion"]
+        elif tabla_actual == "proyectos":
+            columnas = ["nombre", "direccion", "activo"]
+        elif tabla_actual == "roles":
+            columnas = ["descripcion"]
+        else:
+            columnas = []  # Otras tablas
+
+        # Crear los campos del formulario según las columnas
+        for columna in columnas:
+            input_field = ft.TextField(
+                label=columna,
+                value="",  # Por defecto vacío para nuevos registros
+                expand=True,
+            )
+            campos_formulario.append(input_field)
+            campos_input[columna] = input_field
 
         # Función para manejar el guardado
         def guardar_nuevo(e):
+            # Crear el diccionario con los campos del formulario
             nuevos_datos = {
                 columna: campo.value
                 for columna, campo in campos_input.items()
             }
             nuevos_datos["created_at"] = datetime.now().isoformat()  # Fecha y hora actual
-            nuevos_datos[tabla_datos.columns[0].label.value] = None  # PK como None
 
-            print(f"Nuevos datos a agregar (antes): {nuevos_datos}")
+            # Verificar si algún campo está vacío
+            for columna, valor in nuevos_datos.items():
+                if not valor:  # Si el valor está vacío o es nulo
+                    page.snack_bar = ft.SnackBar(
+                        ft.Text(f"Por favor, llena todos los campos. El campo '{columna}' está vacío."),
+                        bgcolor=ft.colors.RED,
+                    )
+                    page.snack_bar.open = True
+                    page.update()
+                    return  # Detener la ejecución y no enviar los datos
+
+            # Añadir id con valor 0 (auto-incrementable en la base de datos)
+            if "id" not in nuevos_datos:
+                if tabla_actual == "gasolineras":
+                    nuevos_datos["id_gasolinera"] = 0
+                elif tabla_actual == "roles":
+                    nuevos_datos["id_rol"] = 0
+                elif tabla_actual == "proyectos":
+                    nuevos_datos["id_proyecto"] = 0
+                elif tabla_actual == "vehiculos":
+                    nuevos_datos["id_vehiculo"] = 0
+                elif tabla_actual == "users":
+                    nuevos_datos["id_usr"] = 0
+                elif tabla_actual == "bitacoras":
+                    nuevos_datos["id_bitacora"] = 0
+
+            # Ahora puedes enviar los datos si todos los campos están completos
+            print(f"Nuevos datos a agregar: {nuevos_datos}")
 
             # Ajustar la ruta según la tabla actual
             if tabla_actual == "users":
@@ -158,6 +221,8 @@ def zona_admin_view(page: ft.Page):
 
             page.dialog.open = False
             page.update()
+
+
 
         # Crear y abrir el cuadro de diálogo
         page.dialog = ft.AlertDialog(
@@ -408,7 +473,7 @@ def zona_admin_view(page: ft.Page):
         expand=True,  # Asegura que ocupe todo el espacio disponible
     )
 
-
+    page.add(tabla_datos)
     return ft.Container(
         content=ft.Row(
             [
@@ -426,4 +491,3 @@ def zona_admin_view(page: ft.Page):
         ),
         expand=True,
     )
-
