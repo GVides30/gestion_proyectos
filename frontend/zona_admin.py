@@ -111,6 +111,25 @@ def zona_admin_view(page: ft.Page):
         actualizar_botones()  # Actualizar visibilidad de botones
         page.update()
 
+    def cargar_roles(dropdown_rol):
+        try:
+            response = requests.get(f"{BACKEND_URL}/roles")
+            if response.status_code == 200:
+                roles = response.json()
+                # Rellenar el Dropdown con las opciones obtenidas
+                dropdown_rol.options = [
+                    ft.dropdown.Option(key=str(rol["id_rol"]), text=rol["descripcion"]) for rol in roles
+                ]
+                page.update()  # Asegurarse de que la página se actualice con los nuevos datos
+            else:
+                page.snack_bar = ft.SnackBar(ft.Text("No se pudieron cargar los roles"), bgcolor=ft.colors.RED)
+                page.snack_bar.open = True
+                page.update()
+        except Exception as ex:
+            page.snack_bar = ft.SnackBar(ft.Text(f"Error al cargar los roles: {ex}"), bgcolor=ft.colors.RED)
+            page.snack_bar.open = True
+            page.update()
+
     def agregar_nuevo(e):
         # Validar si se ha seleccionado una tabla válida
         if not tabla_actual or tabla_actual in ["logs", ""]:  # Validar que no sea "logs" o esté vacío
@@ -127,8 +146,17 @@ def zona_admin_view(page: ft.Page):
 
         # Crear los TextFields para cada columna, excepto las que son auto-generadas (id_*)
         campos_formulario = []
+        
         if tabla_actual == "users":
-            columnas = ["username", "email", "role", "password"]
+            columnas = ["nombre", "apellido", "password", "username", "activo"]
+            # Crear un dropdown solo para la tabla 'users'
+            dropdown_rol = ft.Dropdown(
+                label="Rol",
+                expand=True,
+                on_change=lambda e: print(f"Rol seleccionado: {e.control.value}")  # Ver el valor seleccionado
+            )
+            cargar_roles(dropdown_rol)  # Cargar los roles desde el backend
+            campos_formulario.append(dropdown_rol)
         elif tabla_actual == "vehiculos":
             columnas = ["modelo", "marca", "placa", "rendimiento", "galonaje", "tipo_combustible"]
         elif tabla_actual == "gasolineras":
@@ -157,6 +185,20 @@ def zona_admin_view(page: ft.Page):
                 columna: campo.value
                 for columna, campo in campos_input.items()
             }
+            
+            # Si la tabla es "users", agregar el valor del rol desde el dropdown
+            if tabla_actual == "users":
+                if dropdown_rol.value:  # Verificar que un rol ha sido seleccionado
+                    nuevos_datos["id_rol"] = int(dropdown_rol.value)
+                else:
+                    page.snack_bar = ft.SnackBar(
+                        ft.Text("Por favor, selecciona un rol."),
+                        bgcolor=ft.colors.RED,
+                    )
+                    page.snack_bar.open = True
+                    page.update()
+                    return  # Detener la ejecución si no se ha seleccionado un rol
+
             nuevos_datos["created_at"] = datetime.now().isoformat()  # Fecha y hora actual
 
             # Verificar si algún campo está vacío
@@ -201,27 +243,15 @@ def zona_admin_view(page: ft.Page):
             try:
                 response = requests.post(endpoint, json=nuevos_datos)
                 if response.status_code in [200, 201]:  # 201 para creado exitosamente
-                    page.snack_bar = ft.SnackBar(
-                        ft.Text(f"Datos agregados correctamente en la tabla {tabla_actual}"),
-                        bgcolor=ft.colors.GREEN,
-                    )
-                    cargar_datos_tabla(tabla_actual)  # Recargar la tabla
+                    page.snack_bar = ft.SnackBar(ft.Text("Nuevo registro agregado con éxito"), bgcolor=ft.colors.GREEN)
+                    page.snack_bar.open = True
                 else:
-                    error_message = response.json().get("detail", "Error desconocido")
-                    page.snack_bar = ft.SnackBar(
-                        ft.Text(f"Error al agregar: {error_message}"),
-                        bgcolor=ft.colors.RED,
-                    )
-                page.snack_bar.open = True
+                    page.snack_bar = ft.SnackBar(ft.Text("Error al agregar el registro"), bgcolor=ft.colors.RED)
+                    page.snack_bar.open = True
             except Exception as ex:
-                page.snack_bar = ft.SnackBar(
-                    ft.Text(f"Error de conexión: {ex}"), bgcolor=ft.colors.RED
-                )
+                page.snack_bar = ft.SnackBar(ft.Text(f"Error: {ex}"), bgcolor=ft.colors.RED)
                 page.snack_bar.open = True
-
-            page.dialog.open = False
             page.update()
-
 
 
         # Crear y abrir el cuadro de diálogo
