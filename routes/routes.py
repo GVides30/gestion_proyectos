@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException,status
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, text
+from sqlalchemy import func, inspect, text
 from sqlalchemy.exc import IntegrityError
 from config.db import get_db  # Asegúrate de que get_db esté configurado para obtener la sesión de la base de datos
 from models import models  # Importa tus modelos (Usuario, etc.)
@@ -11,7 +11,7 @@ from cryptography.fernet import Fernet
 from models.models import Proyecto,Gasolinera, Log # Importa tu modelo de Proyecto
 from schemas.schema import Proyecto as ProyectoSchema,GasolineraSchema,RolSchema, BitacoraSchema, BitacoraCreateSchema, BitacoraUpdateSchema # Importa el esquema Pydantic correspondiente
 import os
-
+from config.db import get_db, Base
 # Inicializa el encriptador de contraseña
 key = os.getenv("FERNET_KEY")
 if not key:
@@ -29,8 +29,19 @@ user = APIRouter()
 def get_users(db: Session = Depends(get_db)):
     users = db.query(models.Usuario).all()
     if not users:
-        raise HTTPException(status_code=404, detail="No users found")
-    return [User.from_orm(user) for user in users]
+        # Si la tabla está vacía, retornamos la estructura de la tabla
+        return [{
+            "id_usr": 0,
+            "created_at": "2024-11-30T04:28:22.956Z",
+            "nombre": "string",
+            "apellido": "string",
+            "password": "string",
+            "username": "string",
+            "active": True,
+            "id_rol": 0
+        }]
+    return [User.model_validate(user) for user in users] if users else []
+
 
 
 # Obtener un usuario por ID
@@ -144,12 +155,23 @@ def login(username: str = Query(...), password: str = Query(...), db: Session = 
 vehiculo = APIRouter()
 
 # Ruta para contar vehículos
-@vehiculo.get("/vehiculos", tags=["vehiculos"], response_model=List[Vehiculo], description="Get all vehicles")
+@vehiculo.get("/vehiculos", tags=["vehiculos"], response_model=List[Vehiculo])
 def get_vehiculos(db: Session = Depends(get_db)):
     vehiculos = db.query(models.Vehiculo).all()
     if not vehiculos:
-        raise HTTPException(status_code=404, detail="No vehicles found")
-    return [Vehiculo.from_orm(vehiculo) for vehiculo in vehiculos]
+        # Si la tabla está vacía, retornamos la estructura de la tabla
+        return [{
+            "id_vehiculo": 0,
+            "created_at": "2024-11-30T04:28:06.096Z",
+            "modelo": "string",
+            "marca": "string",
+            "placa": "string",
+            "rendimiento": 0,
+            "galonaje": 0,
+            "tipo_combustible": "string"
+        }]
+    return vehiculos
+
 
 
 # Obtener un vehículo por ID
@@ -240,9 +262,18 @@ def delete_vehiculo(id: int, db: Session = Depends(get_db)):
 proyecto = APIRouter()
 
 # Ruta para obtener la lista de todos los proyectos
-@proyecto.get("/proyectos", tags=["proyectos"], response_model=List[ProyectoSchema], description="Get all projects")
+@proyecto.get("/proyectos", tags=["proyectos"], response_model=List[ProyectoSchema])
 def get_proyectos(db: Session = Depends(get_db)):
     proyectos = db.query(Proyecto).all()
+    if not proyectos:
+        # Si la tabla está vacía, retornamos la estructura de la tabla
+        return [{
+            "id_proyecto": 0,
+            "created_at": "2024-11-30T04:27:52.535Z",
+            "nombre": "string",
+            "direccion": "string",
+            "activo": True
+        }]
     return proyectos
 
 # Ruta para obtener un proyecto por ID
@@ -303,7 +334,17 @@ gasolinera = APIRouter()
 @gasolinera.get("/gasolineras", tags=["gasolineras"], response_model=List[GasolineraSchema])
 def get_all_gasolineras(db: Session = Depends(get_db)):
     gasolineras = db.query(Gasolinera).all()
+    if not gasolineras:
+        # Si la tabla está vacía, retornamos la estructura de la tabla
+        return [{
+            "id_gasolinera": 0,
+            "created_at": "2024-11-30T04:27:19.687Z",
+            "nombre": "string",
+            "direccion": "string"
+        }]
     return gasolineras
+
+
 
 # Ruta para obtener una gasolinera por ID
 @gasolinera.get("/gasolineras/{id}", tags=["gasolineras"], response_model=GasolineraSchema, description="Get a single gasolinera by Id")
@@ -412,13 +453,10 @@ bitacora_router = APIRouter(
 )
 
 # Obtener todas las bitácoras
-@bitacora_router.get("/", response_model=List[BitacoraSchema], status_code=status.HTTP_200_OK)
+@bitacora_router.get("/", response_model=List[BitacoraSchema])
 def get_all_bitacoras(db: Session = Depends(get_db)):
-    # Consulta todas las bitácoras en la base de datos
     bitacoras = db.query(models.Bitacora).all()
-    
-    # Retorna la lista de bitácoras
-    return [BitacoraSchema.from_orm(bitacora) for bitacora in bitacoras]
+    return bitacoras
 
 
 # Crear una nueva bitácora
@@ -527,3 +565,4 @@ log_router = APIRouter()
 def get_logs(db: Session = Depends(get_db)):
     logs = db.query(Log).all()
     return logs
+

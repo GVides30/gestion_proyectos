@@ -2,7 +2,7 @@ import flet as ft
 import requests
 from datetime import datetime
 
-BACKEND_URL = "http://127.0.0.1:8000"  # Cambia según tu configuración
+BACKEND_URL = "http://127.0.0.1:8000/"  # Cambia según tu configuración
 
 def pantalla_bitacora(page: ft.Page):
     tabla_datos = ft.DataTable(

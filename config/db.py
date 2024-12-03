@@ -3,7 +3,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 # Configura la URL de conexión a PostgreSQL
-DATABASE_URL = "postgresql+psycopg2://postgres:password@localhost:5432/gestion_proyectos"
+DATABASE_URL = "postgresql://luisrt:98JqdQVo0GWE9iDc25oqc9JxG52B4Isb@dpg-ct74rru8ii6s73a79gb0-a/pythonapi_b670"
 
 # Crea el motor de la base de datos
 engine = create_engine(DATABASE_URL)
