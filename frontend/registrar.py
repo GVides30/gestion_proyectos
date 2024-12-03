@@ -2,7 +2,7 @@ import flet as ft
 import requests
 from datetime import datetime  # Importar para obtener la fecha y hora actual
 
-BACKEND_URL = "http://127.0.0.1:8000/"  # URL del backend
+BACKEND_URL = "https://gestion-proyectos-g30w.onrender.com/"  # URL del backend
 
 def registrar_view(page: ft.Page):
     # Contenido del formulario

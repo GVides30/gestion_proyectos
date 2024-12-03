@@ -3,7 +3,7 @@ import requests
 from datetime import datetime
 
 
-BACKEND_URL = "http://127.0.0.1:8000/"  # Cambia según tu configuración
+BACKEND_URL = "https://gestion-proyectos-g30w.onrender.com/"  # Cambia según tu configuración
 
 def zona_admin_view(page: ft.Page):
     tabla_actual = None  
